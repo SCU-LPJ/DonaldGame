@@ -1,7 +1,7 @@
-package controller;
+package com.example.controller;
 
-import view.MainFrame;
-import service.KeywordService;
+import com.example.service.KeywordService;
+import com.example.view.MainFrame;
 
 public class GameController {
 

@@ -1,8 +1,8 @@
-package view;
+package com.example.view;
 
 import javax.swing.*;
 import java.awt.*;
-import controller.GameController;
+import com.example.controller.GameController;
 
 public class MainFrame extends JFrame {
 

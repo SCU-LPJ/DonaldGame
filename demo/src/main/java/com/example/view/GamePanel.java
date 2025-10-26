@@ -1,8 +1,8 @@
-package view;
+package com.example.view;
 
 import javax.swing.*;
 import java.awt.*;
-import util.ResourceLoader;
+import com.example.util.ResourceLoader;
 
 public class GamePanel extends JPanel {
 
@@ -11,12 +11,12 @@ public class GamePanel extends JPanel {
 
     public GamePanel() {
         this.setBackground(new Color(220, 245, 255));
-        donald = ResourceLoader.loadImage("donald.png");
+        donald = ResourceLoader.loadImage("images/donald.png");
 
         babyDucks = new Image[]{
-            ResourceLoader.loadImage("dunk_red.png"),
-            ResourceLoader.loadImage("dunk_bule.png"),
-            ResourceLoader.loadImage("dunk_yellow.png")
+            ResourceLoader.loadImage("images/dunk_red.png"),
+            ResourceLoader.loadImage("images/dunk_bule.png"),
+            ResourceLoader.loadImage("images/dunk_yellow.png")
         };
     }
 
