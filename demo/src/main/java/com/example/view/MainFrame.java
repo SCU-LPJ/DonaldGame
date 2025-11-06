@@ -21,11 +21,43 @@ public class MainFrame extends JFrame {
 
         controller = new GameController(this);
 
-        // 游戏主画面（展示角色）
+        // ===== 顶部提示信息 =====
+        JPanel infoPanel = new JPanel();
+        infoPanel.setLayout(new BorderLayout());
+        infoPanel.setBackground(new Color(245, 245, 255)); // 背景颜色淡蓝
+
+        JLabel titleLabel = new JLabel("✨ 欢迎来到唐老鸭与小鸭们的互动世界 ✨", JLabel.CENTER);
+        titleLabel.setFont(new Font("微软雅黑", Font.BOLD, 18));
+        titleLabel.setForeground(new Color(50, 50, 120));
+        infoPanel.add(titleLabel, BorderLayout.NORTH);
+
+        JTextArea featureText = new JTextArea(
+            "具备的交互功能：\n" +
+            "🐣 发红包\n" +
+            "🐣 统计代码量\n" +
+            "🐣 玩游戏\n" +
+            "🐣 调用AI与唐老鸭对话互动\n"
+        );
+        featureText.setEditable(false);
+        featureText.setOpaque(false);
+        featureText.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        featureText.setForeground(new Color(70, 70, 100));
+        featureText.setFocusable(false);
+
+        // 用 JPanel 包裹 featureText，使其居中
+        JPanel featureWrapper = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        featureWrapper.setOpaque(false);
+        featureWrapper.add(featureText);
+
+        infoPanel.add(featureWrapper, BorderLayout.CENTER);
+
+        this.add(infoPanel, BorderLayout.NORTH);
+
+        // ===== 游戏主画面（唐老鸭 + 小鸭们） =====
         gamePanel = new GamePanel();
         this.add(gamePanel, BorderLayout.CENTER);
 
-        // 底部输入区
+        // ===== 底部输入区 =====
         JPanel inputPanel = new JPanel(new BorderLayout());
         inputField = new JTextField();
         sendButton = new JButton("发送");
@@ -33,13 +65,14 @@ public class MainFrame extends JFrame {
         inputPanel.add(sendButton, BorderLayout.EAST);
         this.add(inputPanel, BorderLayout.SOUTH);
 
-        // 聊天显示区
-        chatArea = new JTextArea(8, 40);
+        // ===== 聊天显示区（右侧） =====
+        chatArea = new JTextArea(20, 25);
         chatArea.setEditable(false);
         JScrollPane scrollPane = new JScrollPane(chatArea);
-        this.add(scrollPane, BorderLayout.NORTH);
+        scrollPane.setBorder(BorderFactory.createTitledBorder("聊天记录"));
+        this.add(scrollPane, BorderLayout.EAST);
 
-        // 事件绑定
+        // ===== 事件绑定 =====
         sendButton.addActionListener(e -> controller.handleUserInput(inputField.getText()));
         inputField.addActionListener(e -> controller.handleUserInput(inputField.getText()));
 

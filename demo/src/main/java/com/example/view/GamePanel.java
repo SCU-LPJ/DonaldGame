@@ -26,7 +26,7 @@ public class GamePanel extends JPanel {
 
         // 绘制唐老鸭（左下角）
         if (donald != null)
-            g.drawImage(donald, 100, getHeight() - 220, 150, 150, this);
+            g.drawImage(donald, 45, getHeight() - 220, 150, 150, this);
 
         // 绘制三只唐小鸭（右侧）
         int startX = getWidth() - 400;
