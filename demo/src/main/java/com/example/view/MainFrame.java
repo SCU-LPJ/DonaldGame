@@ -19,8 +19,6 @@ public class MainFrame extends JFrame {
         this.setSize(900, 600);
         this.setLayout(new BorderLayout());
 
-        controller = new GameController(this);
-
         // ===== 顶部提示信息 =====
         JPanel infoPanel = new JPanel();
         infoPanel.setLayout(new BorderLayout());
@@ -36,7 +34,8 @@ public class MainFrame extends JFrame {
             "🐣 发红包\n" +
             "🐣 统计代码量\n" +
             "🐣 玩游戏\n" +
-            "🐣 调用AI与唐老鸭对话互动\n"
+            "🐣 调用AI与唐老鸭对话互动\n" +
+            "🐣 点击小鸭或在聊天框输入“唐老鸭/红色唐小鸭/蓝色唐小鸭/黄色唐小鸭”触发表演\n"
         );
         featureText.setEditable(false);
         featureText.setOpaque(false);
@@ -44,11 +43,9 @@ public class MainFrame extends JFrame {
         featureText.setForeground(new Color(70, 70, 100));
         featureText.setFocusable(false);
 
-        // 用 JPanel 包裹 featureText，使其居中
         JPanel featureWrapper = new JPanel(new FlowLayout(FlowLayout.CENTER));
         featureWrapper.setOpaque(false);
         featureWrapper.add(featureText);
-
         infoPanel.add(featureWrapper, BorderLayout.CENTER);
 
         this.add(infoPanel, BorderLayout.NORTH);
@@ -68,19 +65,43 @@ public class MainFrame extends JFrame {
         // ===== 聊天显示区（右侧） =====
         chatArea = new JTextArea(20, 25);
         chatArea.setEditable(false);
+        chatArea.setLineWrap(true);          // 软换行
+        chatArea.setWrapStyleWord(true);     // 按词换行
         JScrollPane scrollPane = new JScrollPane(chatArea);
         scrollPane.setBorder(BorderFactory.createTitledBorder("聊天记录"));
         this.add(scrollPane, BorderLayout.EAST);
 
-        // ===== 事件绑定 =====
-        sendButton.addActionListener(e -> controller.handleUserInput(inputField.getText()));
-        inputField.addActionListener(e -> controller.handleUserInput(inputField.getText()));
+        // ===== 控制器创建与绑定（关键！）=====
+        controller = new GameController(this);
+        gamePanel.bindController(controller);   // 让 GamePanel 的点击事件能回调控制器
+
+        // 将“发送”设为默认按钮（回车发送）
+        getRootPane().setDefaultButton(sendButton);
+
+        // ===== 事件绑定（判空、清空、聚焦） =====
+        sendButton.addActionListener(e -> sendCurrentInput());
+        inputField.addActionListener(e -> sendCurrentInput());
 
         this.setVisible(true);
+        inputField.requestFocusInWindow();
     }
 
+    private void sendCurrentInput() {
+        String text = inputField.getText();
+        if (text != null) text = text.trim();
+        if (text == null || text.isEmpty()) {
+            return; // 不发送空消息
+        }
+        controller.handleUserInput(text);
+        inputField.setText("");
+        inputField.requestFocusInWindow();
+    }
+
+    /** 供控制器输出聊天文本 */
     public void appendChat(String msg) {
         chatArea.append(msg + "\n");
+        // 自动滚动到底部
+        chatArea.setCaretPosition(chatArea.getDocument().getLength());
     }
 
     public JTextField getInputField() {

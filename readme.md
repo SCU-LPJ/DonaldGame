@@ -5,6 +5,7 @@
 * 唐小鸭换装触发
 * tokei图形化界面ui
 * 发红包-装饰模型
+* AI大模型api接入：访问通义千问平台，通过应用手册部署并调用qianwen大模型
 # 项目结构
 ```bash
 DonaldGame/
@@ -114,5 +115,108 @@ com.duckgame
 │ + GAME                   │
 │ + SLEEP                  │
 └──────────────────────────┘
+
+```
+
+```mermaid
+classDiagram
+    class Homeowner {
+        - name : String
+        - contactInfo : String
+        + viewFloorPlan()
+    }
+
+    class FloorPlan {
+        - address : String
+        - rooms : List
+        + getSensorsInRoom()
+    }
+
+    class ControlPanel {
+        - panelID : String
+        - sensors : List~Sensor~
+        - alarms : List~Alarm~
+        + handleSensorEvent(event: SensorEvent)
+    }
+
+    class Sensor {
+        - sensorID : String
+        - type : String
+        - location : String
+        + generateEvent()
+    }
+
+    class SensorEvent {
+        - eventType : String
+        - timestamp : DateTime
+        - severity : String
+        - sourceSensor : Sensor
+    }
+
+    class Alarm {
+        - alarmType : String
+        - triggeredTime : DateTime
+        + activate()
+    }
+
+    %% 关系
+    Homeowner "1" --> "1..*" ControlPanel : controls
+    Homeowner "1" --> "1" FloorPlan : views
+    ControlPanel "1" --> "1..*" Sensor : manages
+    ControlPanel "1" --> "0..*" Alarm : triggers
+    Sensor "1" --> "0..*" SensorEvent : generates
+    FloorPlan "1" --> "1..*" Sensor : contains
+
+```
+
+```mermaid
+classDiagram
+    class Buyer {
+        - buyerID : String
+        - name : String
+        - email : String
+        + addToCart(goods: Goods, quantity: int)
+        + createOrder()
+    }
+
+    class Seller {
+        - sellerID : String
+        - name : String
+        - contactInfo : String
+        + addGoods(goods: Goods)
+        + removeGoods(goods: Goods)
+    }
+
+    class Goods {
+        - goodsID : String
+        - name : String
+        - price : float
+        - stock : int
+        + updateStock(quantity: int)
+    }
+
+    class Cart {
+        - cartID : String
+        - items : Map~Goods, int~
+        + addItem(goods: Goods, quantity: int)
+        + removeItem(goods: Goods)
+        + checkout()
+    }
+
+    class Order {
+        - orderID : String
+        - date : DateTime
+        - totalAmount : float
+        - status : String
+        + calculateTotal()
+        + updateStatus(status: String)
+    }
+
+    %% 关系
+    Buyer "1" --> "1" Cart : owns
+    Buyer "1" --> "0..*" Order : places
+    Seller "1" --> "1..*" Goods : provides
+    Cart "1" --> "0..*" Goods : contains
+    Order "1" --> "1..*" Goods : includes
 
 ```
