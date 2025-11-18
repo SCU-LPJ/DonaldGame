@@ -46,9 +46,9 @@ public class GameController {
     /** 根据默认策略渲染简洁文本（写入聊天区） */
     private String renderActText(Duck d) {
         // 简单的文本反馈；如果后续需要细粒度映射，可引入事件总线或回调
-        if (d instanceof RedDuck) return "===行为：蹦蹦跳跳 ｜ ===叫声：我是大帅比侯睿";
-        if (d instanceof BlueDuck) return "===行为：转圈圈 ｜ ===叫声：其实我是唐人";
-        if (d instanceof YellowDuck) return "===行为：飞起来了 ｜ ===叫声：奶妈我可以和你玩吗邦邦邦邦";
+        if (d instanceof RedDuck) return "===行为：蹦蹦跳跳 ｜ ===叫声：难道他真的是赋能哥？";
+        if (d instanceof BlueDuck) return "===行为：转圈圈 ｜ ===叫声：嘿刀马刀马嘿刀马刀马";
+        if (d instanceof YellowDuck) return "===行为：飞起来了 ｜ ===叫声：奶妈我可以和你玩吗颗秒邦邦邦邦";
         return "===行为：双手抱拳很生气 ｜ ===叫声：呃啊我怒了我可不和你玩找唐小鸭去";
     }
 

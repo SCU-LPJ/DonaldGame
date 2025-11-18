@@ -220,3 +220,135 @@ classDiagram
     Order "1" --> "1..*" Goods : includes
 
 ```
+
+## 用例图（use case）
+```plantuml
+@startuml
+left to right direction
+
+actor 玩家 as Player
+
+rectangle 系统 {
+  usecase "点击皮肤变装按钮" as UC_ChangeSkin
+}
+
+Player --> UC_ChangeSkin
+@enduml
+
+
+```
+
+## 类图（class diagram）
+```mermaid
+classDiagram
+class MainFrame {
+  +GamePanel gamePanel
+  +GameController controller
+  +initUI()
+}
+
+class GamePanel {
+  +List<DuckSprite> ducks
+  +SkinTheme theme
+  +GameController controller
+  +applySkin(theme)
+  +mouseClickHandler()
+}
+
+class GameController {
+  +triggerDuckByName(name)
+}
+
+class ResourceLoader {
+  <<static>>
+  +loadImage(path) Image
+}
+
+class DuckSprite {
+  +JLabel label
+  +String baseKey
+  +String displayName
+  +updateDuckIcon(theme)
+}
+
+class SkinTheme {
+  <<enum>>
+  +resolve(baseKey) : String
+}
+
+MainFrame --> GamePanel
+MainFrame --> GameController
+
+GamePanel --> DuckSprite : aggregation
+GamePanel --> GameController
+GamePanel --> SkinTheme
+GamePanel --> ResourceLoader : uses
+
+DuckSprite --> SkinTheme
+DuckSprite --> ResourceLoader : uses
+
+```
+
+## 活动图（activity diagram）
+```mermaid
+flowchart TD
+    A([玩家点击换装按钮])
+    B[GamePanel 接收到事件]
+    C{还有鸭子吗？}
+
+    D[构造资源路径]
+    E[加载图片 loadImage]
+
+    F{图片为空？}
+    G[设置缩放后的图标]
+    H[使用兜底样式]
+
+    I[处理下一个鸭子]
+    J[repaint]
+    K([玩家看到更新])
+
+    A --> B --> C
+    C -->|是| D --> E --> F
+    F -->|否| G --> I
+    F -->|是| H --> I
+    I --> C
+    C -->|否| J --> K
+
+
+```
+
+## 顺序图（sequence diagram）
+```mermaid
+sequenceDiagram
+    actor Player as 玩家
+    participant Button
+    participant GamePanel
+    participant DuckSprite
+    participant SkinTheme
+    participant ResourceLoader
+    participant JLabel
+
+    Player ->> Button: click()
+    Button ->> GamePanel: applySkin(theme)
+
+    loop 对每个 DuckSprite（4 次）
+        GamePanel ->> DuckSprite: updateDuckIcon(theme)
+        DuckSprite ->> SkinTheme: resolve(baseKey)
+        SkinTheme -->> DuckSprite: 返回资源后缀
+
+        DuckSprite ->> ResourceLoader: loadImage(path)
+
+        alt 图片存在
+            ResourceLoader -->> DuckSprite: Image
+            DuckSprite ->> JLabel: setIcon(缩放后的图片)
+        else 图片缺失
+            ResourceLoader -->> DuckSprite: null
+            DuckSprite ->> JLabel: applyFallbackStyle()
+        end
+    end
+
+    GamePanel ->> GamePanel: repaint()
+    GamePanel -->> Player: 显示更新后的鸭子贴图
+
+
+```

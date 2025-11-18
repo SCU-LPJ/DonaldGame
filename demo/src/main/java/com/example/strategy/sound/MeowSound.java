@@ -6,7 +6,7 @@ import com.example.util.TTSUtil;
 public class MeowSound implements SoundStrategy {
     @Override
     public void makeSound() {
-        String txt = "其实我是唐人";
+        String txt = "嘿刀马刀马嘿刀马刀马";
         System.out.println("===叫声：" + txt);
         TTSUtil.speak(txt);
     }
