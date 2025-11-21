@@ -3,9 +3,13 @@ package com.example.util;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** 简单跨平台 TTS 调用（Windows / macOS / Linux） */
 public class TTSUtil {
+
+    private static final Logger log = LoggerFactory.getLogger(TTSUtil.class);
 
     /** 默认：在 macOS 上使用中文女声 “Ting-Ting”，语速 180；其他平台沿用原方案 */
     public static void speak(String text) {
@@ -60,7 +64,7 @@ public class TTSUtil {
 
             new ProcessBuilder(cmd).inheritIO().start().waitFor();
         } catch (IOException | InterruptedException e) {
-            System.err.println("TTS 失败: " + e.getMessage());
+            log.error("TTS 失败", e);
         }
     }
 

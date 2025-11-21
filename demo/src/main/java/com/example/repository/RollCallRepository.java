@@ -3,6 +3,8 @@ package com.example.repository;
 import com.example.model.rollcall.RollCallStrategy;
 import com.example.model.rollcall.StudentProfile;
 import com.example.util.DataSourceFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -22,6 +24,7 @@ import java.util.List;
 // 操作数据库的唯一地方 DAO层 写SQL语句 获取连接池 执行sql 返回对象
 public class RollCallRepository {
 
+    private static final Logger log = LoggerFactory.getLogger(RollCallRepository.class);
     private final DataSource dataSource;
 
     public RollCallRepository() {
@@ -36,6 +39,7 @@ public class RollCallRepository {
     // 运行时自动创建数据库表
     public void initSchema() throws SQLException {
         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
+            log.info("建表检查：student / leave_request / roll_call_session / roll_call_item");
             // 学生表
             st.execute("""
                 CREATE TABLE IF NOT EXISTS student (
@@ -90,6 +94,7 @@ public class RollCallRepository {
 
             st.execute("CREATE INDEX IF NOT EXISTS idx_leave_request_range ON leave_request(student_id, start_time, end_time)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_roll_call_item_session ON roll_call_item(session_id)");
+            log.info("建表检查完成");
         }
     }
 
@@ -117,7 +122,7 @@ public class RollCallRepository {
         if (limit < 1) {
             return Collections.emptyList();
         }
-        
+
         // 策略映射到sql排序条件
         String orderBy = switch (strategy) {
             case MAX_ABSENCE -> "ORDER BY absence_count DESC, called_count ASC";
@@ -132,6 +137,7 @@ public class RollCallRepository {
                  LIMIT ?
                 """.formatted(orderBy);
 
+        log.info("按策略抽取学生 strategy={} limit={}", strategy, limit);
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, limit);
@@ -140,6 +146,7 @@ public class RollCallRepository {
                 while (rs.next()) {
                     list.add(mapStudent(rs));
                 }
+                log.debug("抽取完成，返回 {} 人", list.size());
                 return list;
             }
         }

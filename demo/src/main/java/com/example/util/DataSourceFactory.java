@@ -2,6 +2,8 @@ package com.example.util;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -17,6 +19,7 @@ import java.util.Properties;
 // 项目与数据库的唯一桥梁 读取数据库配置 创建连接池
 public final class DataSourceFactory {
 
+    private static final Logger log = LoggerFactory.getLogger(DataSourceFactory.class);
     private static volatile HikariDataSource dataSource;// 建立连接池对象
 
     private DataSourceFactory() {}
@@ -54,6 +57,7 @@ public final class DataSourceFactory {
         config.addDataSourceProperty("prepStmtCacheSize", "250");
         config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
 
+        log.info("初始化 HikariCP 数据源：url={}, user={}", config.getJdbcUrl(), config.getUsername());
         return new HikariDataSource(config);
     }
 
@@ -66,6 +70,7 @@ public final class DataSourceFactory {
             }
             props.load(in);
         } catch (IOException e) {
+            log.error("加载数据库配置失败", e);
             throw new IllegalStateException("加载数据库配置失败", e);
         }
         return props;

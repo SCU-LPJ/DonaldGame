@@ -4,6 +4,8 @@ import com.example.model.*;
 import com.example.service.KeywordService;
 import com.example.service.AIChatService;
 import com.example.view.MainFrame;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.util.HashMap;
@@ -11,6 +13,7 @@ import java.util.Map;
 
 public class GameController {
 
+    private static final Logger log = LoggerFactory.getLogger(GameController.class);
     private final MainFrame frame;
     private final KeywordService keywordService;
     private final AIChatService aiService;
@@ -30,6 +33,7 @@ public class GameController {
         ducks.put("红色唐小鸭", new RedDuck());
         ducks.put("蓝色唐小鸭", new BlueDuck());
         ducks.put("黄色唐小鸭", new YellowDuck());
+        log.info("初始化鸭子注册表：{}", ducks.keySet());
     }
 
     /** 提供给 GamePanel 点击触发 */
@@ -37,6 +41,7 @@ public class GameController {
         Duck d = ducks.get(name);
         if (d == null) return;
 
+        log.info("触发表演：{}", name);
         frame.appendChat(name + "：开始表演！\n");
         d.act(); // 控制台会打印动作和叫声，叫声会通过TTS播放
         frame.appendChat(renderActText(d));
@@ -56,6 +61,7 @@ public class GameController {
     public void handleUserInput(String input) {
         if (input == null || input.trim().isEmpty()) return;
 
+        log.debug("收到用户输入：{}", input.trim());
         frame.appendChat("你说：" + input.trim());
 
         // 1) 先识别鸭子：输入包含鸭子名称，直接触发
@@ -87,6 +93,7 @@ public class GameController {
                         String ai = get();
                         frame.appendChat("唐老鸭：" + (ai == null ? "咱们换种说法试试？" : ai));
                     } catch (Exception e) {
+                        log.error("AI 接口调用失败", e);
                         frame.appendChat("【错误】AI接口调用失败。");
                     }
                 }
