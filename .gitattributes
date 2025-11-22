@@ -1,2 +1,8 @@
+# 把 demo 目录里的代码强制算进统计
+demo/** -linguist-vendored
+demo/** -linguist-generated
+demo/** -linguist-documentation
 demo/** linguist-detectable=true
 
+# 明确告诉 GitHub：所有 .java 都按 Java 统计
+*.java linguist-language=Java
