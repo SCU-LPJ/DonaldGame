@@ -1,5 +1,7 @@
 package com.example.repository;
 
+import com.example.model.rollcall.RollCallItem;
+import com.example.model.rollcall.RollCallStatus;
 import com.example.model.rollcall.RollCallStrategy;
 import com.example.model.rollcall.StudentProfile;
 import com.example.util.DataSourceFactory;
@@ -12,6 +14,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -162,5 +166,166 @@ public class RollCallRepository {
         s.setAbsenceCount(rs.getInt("absence_count"));
         s.setCalledCount(rs.getInt("called_count"));
         return s;
+    }
+
+    /** 创建点名会话，返回生成的 id */
+    public long createSession(String mode, String strategy, Integer count) throws SQLException {
+        String sql = """
+                INSERT INTO roll_call_session (mode, strategy, count)
+                VALUES (?,?,?)
+                RETURNING id
+                """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, mode);
+            ps.setString(2, strategy);
+            if (count == null) {
+                ps.setNull(3, java.sql.Types.INTEGER);
+            } else {
+                ps.setInt(3, count);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    long id = rs.getLong(1);
+                    log.info("创建点名会话成功，id={}", id);
+                    return id;
+                }
+                throw new SQLException("创建点名会话失败，无返回 id");
+            }
+        }
+    }
+
+    /** 结束会话，写入结束时间 */
+    public void endSession(long sessionId) throws SQLException {
+        String sql = "UPDATE roll_call_session SET ended_at = NOW() WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, sessionId);
+            ps.executeUpdate();
+            log.info("结束点名会话：{}", sessionId);
+        }
+    }
+
+    /** 插入点名明细，返回 id */
+    public long insertItem(long sessionId, long studentId, RollCallStatus status, String note) throws SQLException {
+        String sql = """
+                INSERT INTO roll_call_item (session_id, student_id, status, note)
+                VALUES (?,?,?,?)
+                RETURNING id
+                """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, sessionId);
+            ps.setLong(2, studentId);
+            ps.setString(3, status.name());
+            ps.setString(4, note);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    long id = rs.getLong(1);
+                    log.debug("插入点名明细成功 id={}", id);
+                    return id;
+                }
+                throw new SQLException("插入点名明细失败");
+            }
+        }
+    }
+
+    /** 更新明细状态与 answeredAt（可 null） */
+    public void updateItemStatus(long itemId, RollCallStatus status, LocalDateTime answeredAt) throws SQLException {
+        String sql = "UPDATE roll_call_item SET status=?, answered_at=? WHERE id=?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, status.name());
+            if (answeredAt == null) {
+                ps.setNull(2, java.sql.Types.TIMESTAMP);
+            } else {
+                ps.setTimestamp(2, Timestamp.valueOf(answeredAt));
+            }
+            ps.setLong(3, itemId);
+            ps.executeUpdate();
+            log.debug("更新点名明细状态 itemId={} status={}", itemId, status);
+        }
+    }
+
+    public List<RollCallItem> findItemsBySession(long sessionId) throws SQLException {
+        String sql = """
+                SELECT id, session_id, student_id, called_at, answered_at, status, note
+                  FROM roll_call_item
+                 WHERE session_id = ?
+                 ORDER BY called_at
+                """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, sessionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<RollCallItem> list = new ArrayList<>();
+                while (rs.next()) {
+                    RollCallItem item = new RollCallItem();
+                    item.setId(rs.getLong("id"));
+                    item.setSessionId(rs.getLong("session_id"));
+                    item.setStudentId(rs.getLong("student_id"));
+                    item.setCalledAt(rs.getTimestamp("called_at").toLocalDateTime());
+                    Timestamp ans = rs.getTimestamp("answered_at");
+                    if (ans != null) item.setAnsweredAt(ans.toLocalDateTime());
+                    item.setStatus(RollCallStatus.valueOf(rs.getString("status")));
+                    item.setNote(rs.getString("note"));
+                    list.add(item);
+                }
+                return list;
+            }
+        }
+    }
+
+    /** 简单样例插入，便于测试 */
+    public void seedStudentsIfEmpty() throws SQLException {
+        String countSql = "SELECT COUNT(1) FROM student";
+        try (Connection conn = dataSource.getConnection();
+             Statement st = conn.createStatement()) {
+            try (ResultSet rs = st.executeQuery(countSql)) {
+                if (rs.next() && rs.getLong(1) > 0) {
+                    return;
+                }
+            }
+
+            log.info("student 表为空，写入样例数据");
+            st.execute("""
+                INSERT INTO student(stu_no, name, photo_path, absence_count, called_count) VALUES
+                ('2023001','刘畅','resources/images/donald.png',0,0),
+                ('2023002','侯睿','resources/images/student2.png',0,0),
+                ('2023003','Jett','resources/images/student3.png',0,0),
+                ('2023004','mom','resources/images/student4.png',0,0),
+                ('2023005','dad','resources/images/student5.png',0,0)
+                """);
+        }
+    }
+
+    /**
+     * 清空 student 表并插入给定列表，用于随时替换样例或重导全量数据。
+     */
+    public void replaceStudents(List<StudentProfile> students) throws SQLException {
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try (Statement st = conn.createStatement()) {
+                st.execute("TRUNCATE TABLE student RESTART IDENTITY CASCADE");
+            }
+
+            String sql = """
+                    INSERT INTO student(stu_no, name, photo_path, absence_count, called_count)
+                    VALUES (?,?,?,?,?)
+                    """;
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                for (StudentProfile s : students) {
+                    ps.setString(1, s.getStudentNo());
+                    ps.setString(2, s.getName());
+                    ps.setString(3, s.getPhotoPath());
+                    ps.setInt(4, s.getAbsenceCount());
+                    ps.setInt(5, s.getCalledCount());
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+            conn.commit();
+            log.info("已替换 student 表，共写入 {} 条", students.size());
+        }
     }
 }

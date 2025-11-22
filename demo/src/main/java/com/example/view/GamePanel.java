@@ -52,7 +52,7 @@ public class GamePanel extends JPanel {
         JPanel buttonPanel = new JPanel(new GridLayout(SkinTheme.values().length, 1, 0, 8));
         buttonPanel.setOpaque(false);
         buttonPanel.setBorder(BorderFactory.createTitledBorder("皮肤变装"));
-        buttonPanel.setBounds(450, 20, 200, 240);
+        buttonPanel.setBounds(500, 20, 200, 240);
 
         for (SkinTheme theme : SkinTheme.values()) {
             JButton button = new JButton(theme.displayName);

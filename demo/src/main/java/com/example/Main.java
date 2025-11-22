@@ -10,7 +10,11 @@ public class Main {
 
     public static void main(String[] args) {
         log.info("启动应用，准备初始化数据库与界面");
-        new RollCallService().ensureSchema();
+        RollCallService rollCallService = new RollCallService();
+        rollCallService.ensureSchema();
+        // 如需使用 CSV 覆盖样例数据，可启用下一行
+        rollCallService.replaceStudentsFromCsv("config/students.csv");
+        //rollCallService.seedStudentsIfEmpty();
         new MainFrame();
     }
 }
