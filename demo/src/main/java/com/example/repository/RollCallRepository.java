@@ -18,7 +18,9 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * JDBC helper for roll-call related tables. Keeps SQL in one place and
@@ -448,6 +450,74 @@ public class RollCallRepository {
         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
             st.execute("TRUNCATE TABLE roll_call_item, roll_call_session, student RESTART IDENTITY CASCADE");
             log.warn("已清空 roll_call_item / roll_call_session / student 全部数据");
+        }
+    }
+
+    /** 根据学号查学生，不存在返回 null */
+    public StudentProfile findStudentByStuNo(String stuNo) throws SQLException {
+        String sql = """
+                SELECT id, stu_no, name, photo_path, absence_count, called_count
+                  FROM student
+                 WHERE stu_no = ?
+                """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, stuNo);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapStudent(rs);
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 插入请假记录（默认 APPROVED），时间范围由调用方决定 */
+    public void insertLeaveRequest(long studentId, LocalDateTime start, LocalDateTime end, String reason) throws SQLException {
+        String sql = """
+                INSERT INTO leave_request(student_id, start_time, end_time, reason, status)
+                VALUES (?,?,?,?, 'APPROVED')
+                """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, studentId);
+            ps.setTimestamp(2, Timestamp.valueOf(start));
+            ps.setTimestamp(3, Timestamp.valueOf(end));
+            ps.setString(4, reason);
+            ps.executeUpdate();
+            log.info("插入请假记录 studentId={} start={} end={}", studentId, start, end);
+        }
+    }
+
+    /** 当前时间段内已批准的请假学生 id 集合 */
+    public Set<Long> findActiveLeaveStudentIds(LocalDateTime now) throws SQLException {
+        String sql = """
+                SELECT student_id
+                  FROM leave_request
+                 WHERE status = 'APPROVED'
+                   AND start_time <= ?
+                   AND end_time   >= ?
+                """;
+        Set<Long> ids = new HashSet<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            Timestamp ts = Timestamp.valueOf(now);
+            ps.setTimestamp(1, ts);
+            ps.setTimestamp(2, ts);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ids.add(rs.getLong(1));
+                }
+            }
+        }
+        return ids;
+    }
+
+    /** 清空请假记录；用于每轮点名前重置请假名单 */
+    public void clearLeaveRequests() throws SQLException {
+        try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
+            st.execute("TRUNCATE TABLE leave_request RESTART IDENTITY");
+            log.info("已清空 leave_request 表");
         }
     }
 }

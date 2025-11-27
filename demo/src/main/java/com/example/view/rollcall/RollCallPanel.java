@@ -8,12 +8,14 @@ import com.example.service.RollCallService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.example.util.ResourceLoader;
+import com.example.view.rollcall.LeaveRequestDialog;
 
 import javax.swing.*;
 import java.awt.*;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 简单的点名界面：配置 + 展示当前学生 + 四个状态按钮。
@@ -27,6 +29,7 @@ public class RollCallPanel extends JPanel {
     private List<StudentProfile> candidates;
     private int currentIndex = -1;
     private long sessionId;
+    private Set<Long> activeLeaveIds = Collections.emptySet();
 
     private final JLabel infoLabel = new JLabel("请选择点名模式后开始", SwingConstants.CENTER);
     private final JLabel studentLabel = new JLabel("", SwingConstants.CENTER);
@@ -34,6 +37,7 @@ public class RollCallPanel extends JPanel {
     private final JLabel roundLabel = new JLabel("当前点名轮次：-", SwingConstants.LEFT);
     private final JLabel maxAbsentLabel = new JLabel("缺勤次数最多：-", SwingConstants.LEFT);
     private final JLabel minCalledLabel = new JLabel("点到次数最少：-", SwingConstants.LEFT);
+    private final JButton leaveWindowBtn = new JButton("请假窗口");
 
     private final JButton startBtn = new JButton("开始点名");
     private final JComboBox<RollCallMode> modeBox = new JComboBox<>(RollCallMode.values());
@@ -110,6 +114,9 @@ public class RollCallPanel extends JPanel {
         side.add(maxAbsentLabel);
         side.add(Box.createVerticalStrut(8));
         side.add(minCalledLabel);
+        side.add(Box.createVerticalStrut(12));
+        leaveWindowBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        side.add(leaveWindowBtn);
 
         add(side, BorderLayout.WEST);
     }
@@ -121,6 +128,7 @@ public class RollCallPanel extends JPanel {
         lateBtn.addActionListener(e -> mark(RollCallStatus.LATE));
         absentBtn.addActionListener(e -> mark(RollCallStatus.ABSENT));
         clearBtn.addActionListener(e -> clearAllData());
+        leaveWindowBtn.addActionListener(e -> openLeaveDialog());
     }
 
     private void start() {
@@ -128,6 +136,7 @@ public class RollCallPanel extends JPanel {
         RollCallStrategy strat = (RollCallStrategy) stratBox.getSelectedItem();
         int count = parseCount();
 
+        refreshActiveLeave();
         candidates = rollCallService.selectCandidates(mode, strat, count);
         if (candidates.isEmpty()) {
             JOptionPane.showMessageDialog(this, "没有可点名的学生，请先导入数据。");
@@ -153,6 +162,9 @@ public class RollCallPanel extends JPanel {
         currentIndex++;
         if (currentIndex >= candidates.size()) {
             rollCallService.endSession(sessionId);
+            // 本轮结束后清空请假记录，下一轮需重新提交
+            rollCallService.clearLeaveRequests();
+            activeLeaveIds = Collections.emptySet();
             infoLabel.setText("点名完成！");
             studentLabel.setText("");
             photoLabel.setIcon(null);
@@ -160,13 +172,23 @@ public class RollCallPanel extends JPanel {
             return;
         }
         StudentProfile s = candidates.get(currentIndex);
-        studentLabel.setText("当前：" + s.getName() + " (" + s.getStudentNo() + ")");
+        boolean onLeave = activeLeaveIds.contains(s.getId());
+        String leaveTag = onLeave ? "<span style='color:red'>【已请假】</span>" : "";
+        studentLabel.setText("<html>当前：" + s.getName() + " (" + s.getStudentNo() + ") " + leaveTag + "</html>");
         updatePhoto(s.getPhotoPath());
     }
 
     private void mark(RollCallStatus status) {
         if (currentIndex < 0 || currentIndex >= candidates.size()) return;
         StudentProfile s = candidates.get(currentIndex);
+        if (status == RollCallStatus.ABSENT && activeLeaveIds.contains(s.getId())) {
+            int res = JOptionPane.showConfirmDialog(this,
+                    "该同学已提交请假，仍要标记为旷课吗？",
+                    "确认旷课", JOptionPane.YES_NO_OPTION);
+            if (res != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
         long itemId = rollCallService.addItem(sessionId, s.getId(), status, null);
         // 10分钟内赶到逻辑：此处简单写 answeredAt=now，实际可在 UI 层等用户点击时再传
         rollCallService.updateItemStatus(itemId, status, LocalDateTime.now());
@@ -198,6 +220,25 @@ public class RollCallPanel extends JPanel {
         roundLabel.setText("当前点名轮次：-");
         maxAbsentLabel.setText("缺勤次数最多：-");
         minCalledLabel.setText("点到次数最少：-");
+    }
+
+    private void openLeaveDialog() {
+        JFrame owner = (JFrame) SwingUtilities.getWindowAncestor(this);
+        LeaveRequestDialog dialog = new LeaveRequestDialog(owner, rollCallService, () -> {
+            refreshActiveLeave();
+            // 如果当前有学生，更新标签显示
+            if (currentIndex >= 0 && currentIndex < candidates.size()) {
+                StudentProfile s = candidates.get(currentIndex);
+                boolean onLeave = activeLeaveIds.contains(s.getId());
+                String leaveTag = onLeave ? "<span style='color:red'>【已请假】</span>" : "";
+                studentLabel.setText("<html>当前：" + s.getName() + " (" + s.getStudentNo() + ") " + leaveTag + "</html>");
+            }
+        });
+        dialog.setVisible(true);
+    }
+
+    private void refreshActiveLeave() {
+        activeLeaveIds = rollCallService.getActiveLeaveStudentIds();
     }
 
     /** 刷新左侧统计信息：当前轮次 / 缺勤最多 / 点到最少 */

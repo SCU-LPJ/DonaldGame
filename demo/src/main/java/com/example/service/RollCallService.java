@@ -12,6 +12,7 @@ import com.example.util.StudentCsvLoader;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Thin service facade for roll-call domain so UI/controller
@@ -165,6 +166,40 @@ public class RollCallService {
         } catch (SQLException e) {
             log.error("清空点名数据失败", e);
             throw new IllegalStateException("清空点名数据失败", e);
+        }
+    }
+
+    /** 提交请假申请（默认状态 APPROVED），使用学号查找学生 */
+    public void submitLeaveRequest(String stuNo, LocalDateTime start, LocalDateTime end, String reason) {
+        try {
+            StudentProfile sp = repository.findStudentByStuNo(stuNo);
+            if (sp == null) {
+                throw new IllegalArgumentException("未找到学号对应的学生：" + stuNo);
+            }
+            repository.insertLeaveRequest(sp.getId(), start, end, reason);
+        } catch (SQLException e) {
+            log.error("提交请假申请失败 stuNo={}", stuNo, e);
+            throw new IllegalStateException("提交请假申请失败", e);
+        }
+    }
+
+    /** 当前时间段内已批准的请假学生 id 集合 */
+    public Set<Long> getActiveLeaveStudentIds() {
+        try {
+            return repository.findActiveLeaveStudentIds(LocalDateTime.now());
+        } catch (SQLException e) {
+            log.error("查询当前请假学生失败", e);
+            throw new IllegalStateException("查询当前请假学生失败", e);
+        }
+    }
+
+    /** 清空请假表，用于开始新一轮点名前重置 */
+    public void clearLeaveRequests() {
+        try {
+            repository.clearLeaveRequests();
+        } catch (SQLException e) {
+            log.error("清空请假表失败", e);
+            throw new IllegalStateException("清空请假表失败", e);
         }
     }
 }
