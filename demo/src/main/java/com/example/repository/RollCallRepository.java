@@ -120,6 +120,55 @@ public class RollCallRepository {
         }
     }
 
+    /** 历史点名轮次（roll_call_session 条数） */
+    public long countSessions() throws SQLException {
+        String sql = "SELECT COUNT(*) FROM roll_call_session";
+        try (Connection conn = dataSource.getConnection();
+             Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            if (rs.next()) {
+                return rs.getLong(1);
+            }
+            return 0L;
+        }
+    }
+
+    /** 缺勤次数最多的同学（按 absence_count DESC, called_count ASC） */
+    public StudentProfile findMaxAbsenceStudent() throws SQLException {
+        String sql = """
+                SELECT id, stu_no, name, photo_path, absence_count, called_count
+                  FROM student
+                 ORDER BY absence_count DESC, called_count ASC, id ASC
+                 LIMIT 1
+                """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                return mapStudent(rs);
+            }
+            return null;
+        }
+    }
+
+    /** 点到次数最少的同学（按 called_count ASC, absence_count DESC） */
+    public StudentProfile findMinCalledStudent() throws SQLException {
+        String sql = """
+                SELECT id, stu_no, name, photo_path, absence_count, called_count
+                  FROM student
+                 ORDER BY called_count ASC, absence_count DESC, id ASC
+                 LIMIT 1
+                """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                return mapStudent(rs);
+            }
+            return null;
+        }
+    }
+
     /** Pick students by strategy; limit ignored if < 1. */
     // 根据策略选择学生；如果限制小于1，则忽略限制。
     public List<StudentProfile> pickStudents(RollCallStrategy strategy, int limit) throws SQLException {
@@ -223,6 +272,8 @@ public class RollCallRepository {
                 if (rs.next()) {
                     long id = rs.getLong(1);
                     log.debug("插入点名明细成功 id={}", id);
+                    // 更新该学生的统计字段
+                    recalcStudentStats(conn, studentId);
                     return id;
                 }
                 throw new SQLException("插入点名明细失败");
@@ -233,17 +284,77 @@ public class RollCallRepository {
     /** 更新明细状态与 answeredAt（可 null） */
     public void updateItemStatus(long itemId, RollCallStatus status, LocalDateTime answeredAt) throws SQLException {
         String sql = "UPDATE roll_call_item SET status=?, answered_at=? WHERE id=?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, status.name());
-            if (answeredAt == null) {
-                ps.setNull(2, java.sql.Types.TIMESTAMP);
-            } else {
-                ps.setTimestamp(2, Timestamp.valueOf(answeredAt));
+        try (Connection conn = dataSource.getConnection()) {
+            long studentId = findStudentIdByItem(conn, itemId);
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, status.name());
+                if (answeredAt == null) {
+                    ps.setNull(2, java.sql.Types.TIMESTAMP);
+                } else {
+                    ps.setTimestamp(2, Timestamp.valueOf(answeredAt));
+                }
+                ps.setLong(3, itemId);
+                ps.executeUpdate();
+                log.debug("更新点名明细状态 itemId={} status={}", itemId, status);
             }
-            ps.setLong(3, itemId);
+
+            // 状态变更后重新统计该学生的缺勤/点到次数
+            recalcStudentStats(conn, studentId);
+        }
+    }
+
+    /** 根据明细行查找对应学生 id（在同一连接上调用） */
+    private long findStudentIdByItem(Connection conn, long itemId) throws SQLException {
+        String sql = "SELECT student_id FROM roll_call_item WHERE id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, itemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+        }
+        throw new SQLException("未找到对应的点名明细，id=" + itemId);
+    }
+
+    /**
+     * 基于 roll_call_item 重新统计单个学生的 called_count / absence_count，
+     * 以保证策略“缺勤最多 / 点到最少”使用的是最新数据。
+     */
+    private void recalcStudentStats(Connection conn, long studentId) throws SQLException {
+        String statSql = """
+                SELECT
+                  COUNT(*) AS called,
+                  COUNT(*) FILTER (WHERE status = 'ABSENT') AS absent
+                FROM roll_call_item
+                WHERE student_id = ?
+                """;
+        long called = 0L;
+        long absent = 0L;
+        try (PreparedStatement ps = conn.prepareStatement(statSql)) {
+            ps.setLong(1, studentId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    called = rs.getLong("called");
+                    absent = rs.getLong("absent");
+                }
+            }
+        }
+
+        String updSql = """
+                UPDATE student
+                   SET called_count = ?,
+                       absence_count = ?,
+                       updated_at   = NOW()
+                 WHERE id = ?
+                """;
+        try (PreparedStatement ps = conn.prepareStatement(updSql)) {
+            ps.setLong(1, called);
+            ps.setLong(2, absent);
+            ps.setLong(3, studentId);
             ps.executeUpdate();
-            log.debug("更新点名明细状态 itemId={} status={}", itemId, status);
+            log.debug("重新统计学生{}：called_count={} absence_count={}", studentId, called, absent);
         }
     }
 
@@ -300,32 +411,43 @@ public class RollCallRepository {
     }
 
     /**
-     * 清空 student 表并插入给定列表，用于随时替换样例或重导全量数据。
+     * UPSERT 学生数据，避免 TRUNCATE 导致历史明细被级联删除。
+     * 已存在的学号会更新姓名/照片/统计字段，新的学号会插入。
      */
     public void replaceStudents(List<StudentProfile> students) throws SQLException {
-        try (Connection conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            try (Statement st = conn.createStatement()) {
-                st.execute("TRUNCATE TABLE student RESTART IDENTITY CASCADE");
+        String sql = """
+                INSERT INTO student(stu_no, name, photo_path, absence_count, called_count)
+                VALUES (?,?,?,?,?)
+                ON CONFLICT (stu_no) DO UPDATE
+                  SET name = EXCLUDED.name,
+                      photo_path = EXCLUDED.photo_path,
+                      absence_count = EXCLUDED.absence_count,
+                      called_count = EXCLUDED.called_count,
+                      updated_at = NOW()
+                """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (StudentProfile s : students) {
+                ps.setString(1, s.getStudentNo());
+                ps.setString(2, s.getName());
+                ps.setString(3, s.getPhotoPath());
+                ps.setInt(4, s.getAbsenceCount());
+                ps.setInt(5, s.getCalledCount());
+                ps.addBatch();
             }
+            ps.executeBatch();
+            log.info("已同步 student 表（UPSERT），处理 {} 条", students.size());
+        }
+    }
 
-            String sql = """
-                    INSERT INTO student(stu_no, name, photo_path, absence_count, called_count)
-                    VALUES (?,?,?,?,?)
-                    """;
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                for (StudentProfile s : students) {
-                    ps.setString(1, s.getStudentNo());
-                    ps.setString(2, s.getName());
-                    ps.setString(3, s.getPhotoPath());
-                    ps.setInt(4, s.getAbsenceCount());
-                    ps.setInt(5, s.getCalledCount());
-                    ps.addBatch();
-                }
-                ps.executeBatch();
-            }
-            conn.commit();
-            log.info("已替换 student 表，共写入 {} 条", students.size());
+    /**
+     * 危险操作：清空点名相关所有数据（item + session + student），重置自增。
+     * 若要保留历史记录，请勿调用。
+     */
+    public void clearAllRollCallData() throws SQLException {
+        try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
+            st.execute("TRUNCATE TABLE roll_call_item, roll_call_session, student RESTART IDENTITY CASCADE");
+            log.warn("已清空 roll_call_item / roll_call_session / student 全部数据");
         }
     }
 }

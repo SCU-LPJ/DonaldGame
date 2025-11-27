@@ -67,6 +67,36 @@ public class RollCallService {
         }
     }
 
+    /** 已进行的点名轮次（会话数） */
+    public long getSessionCount() {
+        try {
+            return repository.countSessions();
+        } catch (SQLException e) {
+            log.error("统计点名轮次失败", e);
+            throw new IllegalStateException("统计点名轮次失败", e);
+        }
+    }
+
+    /** 缺勤次数最多的同学 */
+    public StudentProfile getMaxAbsenceStudent() {
+        try {
+            return repository.findMaxAbsenceStudent();
+        } catch (SQLException e) {
+            log.error("查询缺勤次数最多的同学失败", e);
+            throw new IllegalStateException("查询缺勤次数最多的同学失败", e);
+        }
+    }
+
+    /** 点到次数最少的同学 */
+    public StudentProfile getMinCalledStudent() {
+        try {
+            return repository.findMinCalledStudent();
+        } catch (SQLException e) {
+            log.error("查询点到次数最少的同学失败", e);
+            throw new IllegalStateException("查询点到次数最少的同学失败", e);
+        }
+    }
+
     public long startSession(RollCallMode mode, RollCallStrategy strategy, Integer count) {
         try {
             return repository.createSession(mode.name(), strategy.name(), count);
@@ -126,5 +156,15 @@ public class RollCallService {
     public void replaceStudentsFromCsv(String resourcePath) {
         List<StudentProfile> list = StudentCsvLoader.load(resourcePath);
         replaceStudents(list);
+    }
+
+    /** 危险操作：清空点名相关的全部数据（学生、会话、明细） */
+    public void clearAllRollCallData() {
+        try {
+            repository.clearAllRollCallData();
+        } catch (SQLException e) {
+            log.error("清空点名数据失败", e);
+            throw new IllegalStateException("清空点名数据失败", e);
+        }
     }
 }

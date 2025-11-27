@@ -31,12 +31,15 @@ public class RollCallPanel extends JPanel {
     private final JLabel infoLabel = new JLabel("请选择点名模式后开始", SwingConstants.CENTER);
     private final JLabel studentLabel = new JLabel("", SwingConstants.CENTER);
     private final JLabel photoLabel = new JLabel("", SwingConstants.CENTER);
+    private final JLabel roundLabel = new JLabel("当前点名轮次：-", SwingConstants.LEFT);
+    private final JLabel maxAbsentLabel = new JLabel("缺勤次数最多：-", SwingConstants.LEFT);
+    private final JLabel minCalledLabel = new JLabel("点到次数最少：-", SwingConstants.LEFT);
 
     private final JButton startBtn = new JButton("开始点名");
     private final JComboBox<RollCallMode> modeBox = new JComboBox<>(RollCallMode.values());
     private final JComboBox<RollCallStrategy> stratBox = new JComboBox<>(RollCallStrategy.values());
     private final JTextField countField = new JTextField("10", 5);
-    private final JButton clearBtn = new JButton("清空学生表");
+    private final JButton clearBtn = new JButton("清空数据");
 
     private final JButton presentBtn = new JButton("到");
     private final JButton leaveBtn = new JButton("请假");
@@ -50,6 +53,7 @@ public class RollCallPanel extends JPanel {
         setLayout(new BorderLayout());
         buildTopForm();
         buildCenter();
+        buildSideStats();
         bindActions();
     }
 
@@ -88,13 +92,35 @@ public class RollCallPanel extends JPanel {
         setButtonsEnabled(false);
     }
 
+    private void buildSideStats() {
+        JPanel side = new JPanel();
+        side.setLayout(new BoxLayout(side, BoxLayout.Y_AXIS));
+        side.setBorder(BorderFactory.createTitledBorder("统计信息"));
+
+        roundLabel.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        maxAbsentLabel.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        minCalledLabel.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+
+        roundLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        maxAbsentLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        minCalledLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        side.add(roundLabel);
+        side.add(Box.createVerticalStrut(8));
+        side.add(maxAbsentLabel);
+        side.add(Box.createVerticalStrut(8));
+        side.add(minCalledLabel);
+
+        add(side, BorderLayout.WEST);
+    }
+
     private void bindActions() {
         startBtn.addActionListener(e -> start());
         presentBtn.addActionListener(e -> mark(RollCallStatus.PRESENT));
         leaveBtn.addActionListener(e -> mark(RollCallStatus.LEAVE));
         lateBtn.addActionListener(e -> mark(RollCallStatus.LATE));
         absentBtn.addActionListener(e -> mark(RollCallStatus.ABSENT));
-        clearBtn.addActionListener(e -> clearStudents());
+        clearBtn.addActionListener(e -> clearAllData());
     }
 
     private void start() {
@@ -110,6 +136,7 @@ public class RollCallPanel extends JPanel {
         sessionId = rollCallService.startSession(mode, strat, count);
         currentIndex = -1;
         infoLabel.setText("本次点名人数：" + candidates.size());
+        refreshStatsPanel();
         next();
         setButtonsEnabled(true);
     }
@@ -154,19 +181,43 @@ public class RollCallPanel extends JPanel {
         absentBtn.setEnabled(enabled);
     }
 
-    private void clearStudents() {
-        int res = JOptionPane.showConfirmDialog(this, "确认清空 student 表吗？此操作不可恢复。", "确认清空", JOptionPane.YES_NO_OPTION);
-        if (res != JOptionPane.YES_OPTION) {
-            return;
-        }
-        rollCallService.replaceStudents(Collections.emptyList());
+    private void clearAllData() {
+        int res = JOptionPane.showConfirmDialog(this,
+                "确认清空学生/点名会话/明细全部数据吗？此操作不可恢复！",
+                "危险操作确认", JOptionPane.YES_NO_OPTION);
+        if (res != JOptionPane.YES_OPTION) return;
+        rollCallService.clearAllRollCallData();
         candidates = Collections.emptyList();
         currentIndex = -1;
-        infoLabel.setText("学生表已清空，请重新导入数据后点名");
+        infoLabel.setText("已清空所有数据，请重新导入学生后点名");
         studentLabel.setText("");
         photoLabel.setIcon(null);
         setButtonsEnabled(false);
-        log.warn("已清空 student 表");
+        log.warn("已清空全部点名相关数据");
+        // 清空统计区显示
+        roundLabel.setText("当前点名轮次：-");
+        maxAbsentLabel.setText("缺勤次数最多：-");
+        minCalledLabel.setText("点到次数最少：-");
+    }
+
+    /** 刷新左侧统计信息：当前轮次 / 缺勤最多 / 点到最少 */
+    private void refreshStatsPanel() {
+        long rounds = rollCallService.getSessionCount();
+        roundLabel.setText("当前点名轮次：" + rounds);
+
+        StudentProfile maxAbsent = rollCallService.getMaxAbsenceStudent();
+        if (maxAbsent != null) {
+            maxAbsentLabel.setText("缺勤次数最多：" + maxAbsent.getName() + " (" + maxAbsent.getStudentNo() + ")");
+        } else {
+            maxAbsentLabel.setText("缺勤次数最多：-");
+        }
+
+        StudentProfile minCalled = rollCallService.getMinCalledStudent();
+        if (minCalled != null) {
+            minCalledLabel.setText("点到次数最少：" + minCalled.getName() + " (" + minCalled.getStudentNo() + ")");
+        } else {
+            minCalledLabel.setText("点到次数最少：-");
+        }
     }
 
     private void updatePhoto(String path) {
