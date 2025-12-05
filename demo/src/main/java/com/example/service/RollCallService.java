@@ -3,6 +3,7 @@ package com.example.service;
 import com.example.model.rollcall.RollCallMode;
 import com.example.model.rollcall.RollCallStrategy;
 import com.example.model.rollcall.RollCallStatus;
+import com.example.model.rollcall.RollCallSummary;
 import com.example.model.rollcall.StudentProfile;
 import com.example.repository.RollCallRepository;
 import org.slf4j.Logger;
@@ -200,6 +201,16 @@ public class RollCallService {
         } catch (SQLException e) {
             log.error("清空请假表失败", e);
             throw new IllegalStateException("清空请假表失败", e);
+        }
+    }
+
+    /** 获取某轮点名的状态统计 */
+    public RollCallSummary summarizeSession(long sessionId) {
+        try {
+            return repository.summarizeSession(sessionId);
+        } catch (SQLException e) {
+            log.error("统计点名会话失败 id={}", sessionId, e);
+            throw new IllegalStateException("统计点名会话失败", e);
         }
     }
 }

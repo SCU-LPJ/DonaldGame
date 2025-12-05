@@ -11,6 +11,7 @@
 /Users/litailai/code/DonaldGame/demo/src/main/java/com/example/model/rollcall/RollCallSession.java
 /Users/litailai/code/DonaldGame/demo/src/main/java/com/example/model/rollcall/RollCallStatus.java
 /Users/litailai/code/DonaldGame/demo/src/main/java/com/example/model/rollcall/RollCallStrategy.java
+/Users/litailai/code/DonaldGame/demo/src/main/java/com/example/model/rollcall/RollCallSummary.java
 /Users/litailai/code/DonaldGame/demo/src/main/java/com/example/model/rollcall/StudentProfile.java
 /Users/litailai/code/DonaldGame/demo/src/main/java/com/example/repository/RollCallRepository.java
 /Users/litailai/code/DonaldGame/demo/src/main/java/com/example/service/AIChatService.java

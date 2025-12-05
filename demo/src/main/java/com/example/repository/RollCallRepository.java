@@ -3,6 +3,7 @@ package com.example.repository;
 import com.example.model.rollcall.RollCallItem;
 import com.example.model.rollcall.RollCallStatus;
 import com.example.model.rollcall.RollCallStrategy;
+import com.example.model.rollcall.RollCallSummary;
 import com.example.model.rollcall.StudentProfile;
 import com.example.util.DataSourceFactory;
 import org.slf4j.Logger;
@@ -519,5 +520,31 @@ public class RollCallRepository {
             st.execute("TRUNCATE TABLE leave_request RESTART IDENTITY");
             log.info("已清空 leave_request 表");
         }
+    }
+
+    /** 统计某次点名的各状态人数 */
+    public RollCallSummary summarizeSession(long sessionId) throws SQLException {
+        String sql = """
+                SELECT status, COUNT(*) AS cnt
+                  FROM roll_call_item
+                 WHERE session_id = ?
+                 GROUP BY status
+                """;
+        RollCallSummary summary = new RollCallSummary();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, sessionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String status = rs.getString("status");
+                    int cnt = rs.getInt("cnt");
+                    if (RollCallStatus.PRESENT.name().equals(status)) summary.setPresent(cnt);
+                    else if (RollCallStatus.LEAVE.name().equals(status)) summary.setLeave(cnt);
+                    else if (RollCallStatus.LATE.name().equals(status)) summary.setLate(cnt);
+                    else if (RollCallStatus.ABSENT.name().equals(status)) summary.setAbsent(cnt);
+                }
+            }
+        }
+        return summary;
     }
 }

@@ -13,9 +13,11 @@ import com.example.view.rollcall.LeaveRequestDialog;
 import javax.swing.*;
 import java.awt.*;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import javax.swing.Timer;
 
 /**
  * 简单的点名界面：配置 + 展示当前学生 + 四个状态按钮。
@@ -30,10 +32,14 @@ public class RollCallPanel extends JPanel {
     private int currentIndex = -1;
     private long sessionId;
     private Set<Long> activeLeaveIds = Collections.emptySet();
+    private Long currentItemId = null;
+    private LocalDateTime currentCalledAt = null;
+    private Timer clockTimer;
 
     private final JLabel infoLabel = new JLabel("请选择点名模式后开始", SwingConstants.CENTER);
     private final JLabel studentLabel = new JLabel("", SwingConstants.CENTER);
     private final JLabel photoLabel = new JLabel("", SwingConstants.CENTER);
+    private final JLabel clockLabel = new JLabel("计时：00:00", SwingConstants.CENTER);
     private final JLabel roundLabel = new JLabel("当前点名轮次：-", SwingConstants.LEFT);
     private final JLabel maxAbsentLabel = new JLabel("缺勤次数最多：-", SwingConstants.LEFT);
     private final JLabel minCalledLabel = new JLabel("点到次数最少：-", SwingConstants.LEFT);
@@ -80,7 +86,16 @@ public class RollCallPanel extends JPanel {
         center.add(infoLabel, BorderLayout.NORTH);
 
         studentLabel.setFont(new Font("微软雅黑", Font.PLAIN, 20));
-        center.add(studentLabel, BorderLayout.SOUTH);
+
+        JPanel middle = new JPanel();
+        middle.setLayout(new BoxLayout(middle, BoxLayout.Y_AXIS));
+        studentLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        clockLabel.setFont(new Font("微软雅黑", Font.PLAIN, 16));
+        clockLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        middle.add(studentLabel);
+        middle.add(Box.createVerticalStrut(6));
+        middle.add(clockLabel);
+        center.add(middle, BorderLayout.SOUTH);
 
         photoLabel.setPreferredSize(new Dimension(220, 220));
         center.add(photoLabel, BorderLayout.CENTER);
@@ -162,12 +177,16 @@ public class RollCallPanel extends JPanel {
         currentIndex++;
         if (currentIndex >= candidates.size()) {
             rollCallService.endSession(sessionId);
+            showSummary();
             // 本轮结束后清空请假记录，下一轮需重新提交
             rollCallService.clearLeaveRequests();
             activeLeaveIds = Collections.emptySet();
             infoLabel.setText("点名完成！");
             studentLabel.setText("");
             photoLabel.setIcon(null);
+            currentItemId = null;
+            currentCalledAt = null;
+            stopClock();
             setButtonsEnabled(false);
             return;
         }
@@ -176,10 +195,15 @@ public class RollCallPanel extends JPanel {
         String leaveTag = onLeave ? "<span style='color:red'>【已请假】</span>" : "";
         studentLabel.setText("<html>当前：" + s.getName() + " (" + s.getStudentNo() + ") " + leaveTag + "</html>");
         updatePhoto(s.getPhotoPath());
+        // 插入明细，初始记为缺勤，answered_at 为空
+        currentCalledAt = LocalDateTime.now();
+        currentItemId = rollCallService.addItem(sessionId, s.getId(), RollCallStatus.ABSENT, null);
+        startClock();
     }
 
     private void mark(RollCallStatus status) {
         if (currentIndex < 0 || currentIndex >= candidates.size()) return;
+        if (currentItemId == null) return;
         StudentProfile s = candidates.get(currentIndex);
         if (status == RollCallStatus.ABSENT && activeLeaveIds.contains(s.getId())) {
             int res = JOptionPane.showConfirmDialog(this,
@@ -189,10 +213,11 @@ public class RollCallPanel extends JPanel {
                 return;
             }
         }
-        long itemId = rollCallService.addItem(sessionId, s.getId(), status, null);
-        // 10分钟内赶到逻辑：此处简单写 answeredAt=now，实际可在 UI 层等用户点击时再传
-        rollCallService.updateItemStatus(itemId, status, LocalDateTime.now());
+        LocalDateTime answered = (status == RollCallStatus.PRESENT || status == RollCallStatus.LATE)
+                ? LocalDateTime.now() : null;
+        rollCallService.updateItemStatus(currentItemId, status, answered);
         log.info("学生 {}({}) 标记为 {}", s.getName(), s.getStudentNo(), status);
+        stopClock();
         next();
     }
 
@@ -211,6 +236,9 @@ public class RollCallPanel extends JPanel {
         rollCallService.clearAllRollCallData();
         candidates = Collections.emptyList();
         currentIndex = -1;
+        currentItemId = null;
+        currentCalledAt = null;
+        stopClock();
         infoLabel.setText("已清空所有数据，请重新导入学生后点名");
         studentLabel.setText("");
         photoLabel.setIcon(null);
@@ -239,6 +267,34 @@ public class RollCallPanel extends JPanel {
 
     private void refreshActiveLeave() {
         activeLeaveIds = rollCallService.getActiveLeaveStudentIds();
+    }
+
+    private void startClock() {
+        stopClock();
+        clockLabel.setVisible(true);
+        clockLabel.setText("计时：00:00");
+        clockTimer = new Timer(1000, e -> updateClockLabel());
+        clockTimer.start();
+    }
+
+    private void stopClock() {
+        if (clockTimer != null) {
+            clockTimer.stop();
+            clockTimer = null;
+        }
+        clockLabel.setText("");
+        clockLabel.setVisible(false);
+    }
+
+    private void updateClockLabel() {
+        if (currentCalledAt == null) {
+            clockLabel.setText("计时：00:00");
+            return;
+        }
+        long seconds = Duration.between(currentCalledAt, LocalDateTime.now()).getSeconds();
+        long mins = seconds / 60;
+        long secs = seconds % 60;
+        clockLabel.setText(String.format("计时：%02d:%02d", mins, secs));
     }
 
     /** 刷新左侧统计信息：当前轮次 / 缺勤最多 / 点到最少 */
@@ -275,5 +331,16 @@ public class RollCallPanel extends JPanel {
         } else {
             photoLabel.setIcon(null);
         }
+    }
+
+    private void showSummary() {
+        if (sessionId <= 0) return;
+        var summary = rollCallService.summarizeSession(sessionId);
+        String msg = "本轮统计：\n"
+                + "出勤：" + summary.getPresent() + "\n"
+                + "请假：" + summary.getLeave() + "\n"
+                + "迟到：" + summary.getLate() + "\n"
+                + "旷课：" + summary.getAbsent();
+        JOptionPane.showMessageDialog(this, msg, "点名结果", JOptionPane.INFORMATION_MESSAGE);
     }
 }
