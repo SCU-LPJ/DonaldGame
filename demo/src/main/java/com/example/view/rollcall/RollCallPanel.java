@@ -8,6 +8,7 @@ import com.example.service.RollCallService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.example.util.ResourceLoader;
+import com.example.util.TTSUtil;
 import com.example.view.rollcall.LeaveRequestDialog;
 
 import javax.swing.*;
@@ -195,6 +196,8 @@ public class RollCallPanel extends JPanel {
         String leaveTag = onLeave ? "<span style='color:red'>【已请假】</span>" : "";
         studentLabel.setText("<html>当前：" + s.getName() + " (" + s.getStudentNo() + ") " + leaveTag + "</html>");
         updatePhoto(s.getPhotoPath());
+        // 语音播报学生姓名
+        TTSUtil.speak(s.getName());
         // 插入明细，初始记为缺勤，answered_at 为空
         currentCalledAt = LocalDateTime.now();
         currentItemId = rollCallService.addItem(sessionId, s.getId(), RollCallStatus.ABSENT, null);
